@@ -4,61 +4,85 @@
 
 #include "LPC17xx.h"
 
-#define SECUENCIA_1 0b1010100
+#define SECUENCIA_1 0b1011100
 #define SECUENCIA_2 0b0101101
+
+#define REDLED 		(1<<22)
 
 void config_GPIO();
 void delay (unsigned int count);
-void rotar (short int secuencia);
+void rotar ();
 void leer_cambio();
 void mostrar (const short int secuencia);
 void reset();
+
+
 short int secuencia_actual = SECUENCIA_1;
-uint8_t status = 0;
+uint8_t currentState;
+uint8_t previousState = 1;                          //comienza en un estado en alto
+short int cont = 0;
 
 int main(void) {
 	config_GPIO();
 
 	while(1){
-		for(int cont=0;cont<7;cont++){
+
+		for(cont=0; cont<7; cont++){
 			leer_cambio();
 			mostrar(secuencia_actual);
-			delay(1000);
-			rotar(secuencia_actual);
+			delay(10);
+			rotar();
 		}
 		reset();
 	}
     return 0 ;
 }
+
+
 void config_GPIO(){
-	LPC_PINCON -> PINSEL0 &= ~(0b11<<0); //configuramos el pin P0.0 para que funcione como GPIO
-	LPC_PINCON -> PINSEL2 &= ~(0b11<<0);
-	LPC_GPIO0  -> FIODIR0 |= (1<<0);    //configuración como salida del P0.0
-	LPC_GPIO1  -> FIODIR1 &= ~(0b1<<0); //configuración como entrada del P1.0
-	LPC_PINCON -> PINMODE2 |= (0b11<<0); //habilitamos la pull_down para la entrada
-	LPC_GPIO0  -> FIOMASK0 &= ~(1<<0);   //fijamos una mascara para no afectar los otros puertos
+
+	LPC_PINCON -> PINSEL1 &= ~(3<<12);       //configuramos el pin como GPIO
+	LPC_GPIO0  -> FIODIR |= REDLED;         //configuramos el pin como salida
+
+	LPC_PINCON -> PINSEL4 &= ~(0b11<<20);   //configuramos el pin como GPIO
+	LPC_GPIO2  -> FIODIR1 &= ~(0b1<<2);     //configuramos la dirección del pin como entrada
+
 }
+
+
 void delay (unsigned int count){
 	for(int i=0;i<count;i++){
 		for(int j=0;j<1000;j++);
 	}
 }
-void rotar (short int secuencia){
-	secuencia = secuencia >> 1;
+
+void rotar (){
+	secuencia_actual = secuencia_actual >> 1;
 }
+
 void leer_cambio(){
-	if(LPC_GPIO1 -> FIOPIN0 && status){
+	currentState = (LPC_GPIO2 -> FIOPIN1 >>2)  & 1;
+	if(currentState != previousState){
 			reset();
-			status = LPC_GPIO1 -> FIOPIN0;
-		}
+	}
+	previousState = currentState;
 }
-void mostrar (const short int secuencia){
-	LPC_GPIO0 -> FIOPIN0 = secuencia;
+
+void mostrar (const short int secuencia)
+{
+	if( (1 & secuencia) == 1 )             //solo comparamos el bit 0 (si es igual a 1)
+	{
+		LPC_GPIO0->FIOCLR |= REDLED;      //encendemos el led
+	}else{
+		LPC_GPIO0->FIOSET |= REDLED;      //apagamos el led
+	}
 }
+
 void reset(){
-	if(LPC_GPIO1 -> FIOPIN0 && 1){
+	if(currentState == 1){
+			secuencia_actual = SECUENCIA_1;
+	}else{
 			secuencia_actual = SECUENCIA_2;
-			}else{
-				secuencia_actual = SECUENCIA_1;
-			}
+	}
+	cont = 0;
 }
